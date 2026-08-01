@@ -1,112 +1,219 @@
-import { Component } from '@angular/core';
+import {
+  ChangeDetectorRef,
+  Component
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
+
 import { Cell } from '../cell/cell';
 import { GameService } from '../../services/game';
-
+import { GameStatus } from '../../models/game-status';
 
 @Component({
-  
   selector: 'app-board',
   standalone: true,
-  imports: [CommonModule, Cell],
+  imports: [
+    CommonModule,
+    Cell
+  ],
   template: `
-<h2 *ngIf="game.winner" class="winner">
-  🎉 Winner: {{ game.winner }}
-</h2>
-<div class="board-wrapper">
-    <div class="board">
-      <app-cell
-  *ngFor="let cell of game.cells; let i = index"
-  [value]="cell"
-  [isWinner]="game.winningCombo.includes(i)"
-  (cellClick)="game.makeMove(i)">
-</app-cell>
-    </div>
-<div class="buttons">
-  <button class="reset" (click)="game.resetGame()">
-    Reset Board
-  </button>
+    <div class="board-wrapper">
+      <div class="board" *ngIf="game.gameState$ | async as state">
+        <app-cell
+          *ngFor="let cell of state.board; let i = index"
+          [value]="cell"
+          [highlight]="state.winningCombination?.includes(i)"
+          (cellClick)="makeMove(i)">
+        </app-cell>
+      </div>
 
-  <button class="reset-score" (click)="game.resetScore()">
-    Reset Score
-  </button>
-</div>
-    
-</div>
+      <div class="buttons">
+
+        <button
+          class="undo"
+          type="button"
+          [disabled]="!canUndo"
+          (click)="undo()">
+          Undo Last Move
+        </button>
+
+        <button
+          class="reset"
+          type="button"
+          (click)="resetGame()">
+          Reset Game
+        </button>
+
+      </div>
+
+      <div class="moves" *ngIf="(game.gameState$ | async)?.moves?.length">
+
+        <h3>Move History</h3>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Move</th>
+              <th>Player</th>
+              <th>Position</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr *ngFor="let move of (game.gameState$ | async)?.moves">
+              <td>{{ move.moveNumber }}</td>
+              <td>{{ move.player }}</td>
+              <td>{{ getPositionText(move.position) }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+      </div>
+
+    </div>
   `,
   styles: [`
-  h2 {
-    margin-bottom: 10px;
-  }
+    .board-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
 
-.board {
-  display: grid;
-  grid-template-columns: repeat(3, 100px);
-  gap: 10px;
-  padding: 15px;
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, 100px);
+      gap: 10px;
+      padding: 15px;
 
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 15px;
-  backdrop-filter: blur(10px);
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 15px;
+      backdrop-filter: blur(10px);
 
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-}
-.board-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.reset, .reset-score {
-  padding: 10px 18px;
-  font-size: 14px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: 0.2s;
-}
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
 
-/* Board reset */
-.reset {
-  background: #ffd166;
-  color: #222;
-}
+    .buttons {
+      display: flex;
+      gap: 15px;
+      margin-top: 20px;
+    }
 
-.reset:hover {
-  background: #ffb703;
-}
+    button {
+      padding: 10px 18px;
+      font-size: 14px;
+      border: 2px solid #00ffcc;
+      border-radius: 6px;
+      cursor: pointer;
+      background: transparent;
+      color: #00ffcc;
+    }
 
-/* Score reset */
-.reset-score {
-  background: #ef476f;
-  color: white;
-}
+    button:hover:not(:disabled) {
+      background: #00ffcc;
+      color: black;
+    }
 
-.reset-score:hover {
-  background: #d62839;
-}
-  .buttons {
-  display: flex;
-  gap: 15px;
-  margin-top: 20px;
-}
-button {
-  margin-top: 15px;
-  background: transparent;
-  border: 2px solid #00ffcc;
-  color: #00ffcc;
-}
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
 
-button:hover {
-  background: #00ffcc;
-  color: black;
-}
-.winner {
-  color: #00ffcc;
-  text-shadow: 0 0 10px #00ffcc;
-}
-`]
+    .moves {
+      margin-top: 25px;
+      width: 350px;
+    }
+
+    .moves h3 {
+      margin-bottom: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+    }
+  `]
 })
 export class Board {
-  constructor(public game: GameService) {}
 
+  readonly GameStatus = GameStatus;
+  winningCells: number[] = [];
+  constructor(
+  public readonly game: GameService,
+  private readonly cdr: ChangeDetectorRef
+) {}
+
+makeMove(position: number): void {
+  if (!this.game.gameState$.value) {
+    return;
+  }
+
+  if (this.game.gameState$.value.status !== GameStatus.InProgress) {
+    return;
+  }
+
+  if (this.game.gameState$.value.board[position]) {
+    return;
+  }
+
+  this.game.makeMove(position).subscribe({
+  next: game => {
+    console.log('Returned game', game);
+    console.log('Service state', this.game.gameState$);
+    console.log('Board value', this.game.gameState$.value?.board);
+    if (game.winningCombination) {
+      this.winningCells = game.winningCombination;
+    }
+    if (game.status !== GameStatus.InProgress) {
+      this.game.getScoreboard().subscribe();
+    }
+    this.cdr.detectChanges();
+  }
+});
+}
+
+  undo(): void {
+    this.game.undo().subscribe({
+      error: error => {
+        console.error('Failed to undo move', error);
+      }
+    });
+  }
+
+  resetGame(): void {
+    this.winningCells = [];
+    this.game.resetGame().subscribe({
+      next: () => {
+        this.game.getScoreboard().subscribe();
+      },
+      error: error => {
+        console.error('Failed to reset game', error);
+      }
+    });
+  }
+
+  get canUndo(): boolean {
+    const state = this.game.gameState$.value;
+
+    if (!state) {
+      return false;
+    }
+
+    if (state.status !== GameStatus.InProgress) {
+      return false;
+    }
+
+    return state.moves.length > 0;
+  }
+
+  getPositionText(position: number): string {
+    const row = Math.floor(position / 3) + 1;
+    const column = (position % 3) + 1;
+
+    return `Row ${row}, Column ${column}`;
+  }
 }

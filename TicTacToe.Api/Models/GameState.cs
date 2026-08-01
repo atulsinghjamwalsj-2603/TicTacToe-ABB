@@ -21,6 +21,6 @@ public class GameState
     public GameStatus Status { get; set; } = GameStatus.InProgress;
     public string? Winner { get; set; }
     public GameMode Mode { get; set; } = GameMode.TwoPlayer;
-
+    public List<int>? WinningCombination { get; set; }
     public List<Move> Moves { get; set; } = new();
 }

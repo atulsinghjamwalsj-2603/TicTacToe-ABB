@@ -14,7 +14,8 @@ public class GameService
             Mode = mode,
             Board = new string[9],
             CurrentPlayer = "X",
-            Status = GameStatus.InProgress
+            Status = GameStatus.InProgress,
+            WinningCombination = null,
         };
 
         _games[game.Id] = game;
@@ -32,13 +33,11 @@ public class GameService
 
         var game = _games[id];
 
-        // validations
         if (game.Status != GameStatus.InProgress) return game;
         if (game.CurrentPlayer != player) return game;
         if (position < 0 || position > 8) return game;
         if (!string.IsNullOrEmpty(game.Board[position])) return game;
 
-        // apply move
         game.Board[position] = player;
 
         game.Moves.Add(new Move
@@ -48,16 +47,13 @@ public class GameService
             Position = position
         });
 
-        // Check winner
         CheckWinner(game);
 
-        // Switch player
         if (game.Status == GameStatus.InProgress)
         {
             game.CurrentPlayer = player == "X" ? "O" : "X";
         }
 
-        // Computer move
         if (game.Mode == GameMode.VsComputer &&
             game.CurrentPlayer == "O" &&
             game.Status == GameStatus.InProgress)
@@ -68,19 +64,13 @@ public class GameService
         return game;
     }
 
-    // Winner logic
     private void CheckWinner(GameState game)
     {
         int[][] winPatterns = new int[][]
         {
-            new[] {0,1,2},
-            new[] {3,4,5},
-            new[] {6,7,8},
-            new[] {0,3,6},
-            new[] {1,4,7},
-            new[] {2,5,8},
-            new[] {0,4,8},
-            new[] {2,4,6}
+            new[] {0,1,2}, new[] {3,4,5}, new[] {6,7,8},
+            new[] {0,3,6}, new[] {1,4,7}, new[] {2,5,8},
+            new[] {0,4,8}, new[] {2,4,6}
         };
 
         foreach (var pattern in winPatterns)
@@ -93,6 +83,7 @@ public class GameService
             {
                 game.Status = GameStatus.Won;
                 game.Winner = a;
+                game.WinningCombination = new List<int> { pattern[0], pattern[1], pattern[2] };
 
                 if (a == "X") _scoreboard.XWins++;
                 else _scoreboard.OWins++;
@@ -101,7 +92,6 @@ public class GameService
             }
         }
 
-        // Draw
         if (game.Board.All(x => !string.IsNullOrEmpty(x)))
         {
             game.Status = GameStatus.Draw;
@@ -109,37 +99,101 @@ public class GameService
         }
     }
 
-    // Basic Computer AI
+    // 🔥 SMART AI IMPLEMENTATION
     private void MakeComputerMove(GameState game)
     {
-        var available = game.Board
+        var available = GetAvailableMoves(game.Board);
+        if (!available.Any()) return;
+
+        // 1. Win
+        var winMove = FindWinningMove(game, "O");
+        if (winMove.HasValue)
+        {
+            ApplyMove(game, winMove.Value, "O");
+            return;
+        }
+
+        // 2. Block
+        var blockMove = FindWinningMove(game, "X");
+        if (blockMove.HasValue)
+        {
+            ApplyMove(game, blockMove.Value, "O");
+            return;
+        }
+
+        // 3. Center
+        if (available.Contains(4))
+        {
+            ApplyMove(game, 4, "O");
+            return;
+        }
+
+        // 4. Corners
+        int[] corners = { 0, 2, 6, 8 };
+        var corner = corners.FirstOrDefault(c => available.Contains(c));
+        if (available.Contains(corner))
+        {
+            ApplyMove(game, corner, "O");
+            return;
+        }
+
+        // 5. Fallback
+        ApplyMove(game, available.First(), "O");
+    }
+
+    private List<int> GetAvailableMoves(string[] board)
+    {
+        return board
             .Select((val, idx) => new { val, idx })
             .Where(x => string.IsNullOrEmpty(x.val))
             .Select(x => x.idx)
             .ToList();
+    }
 
-        if (!available.Any()) return;
+    private int? FindWinningMove(GameState game, string player)
+    {
+        int[][] winPatterns = new int[][]
+        {
+            new[] {0,1,2}, new[] {3,4,5}, new[] {6,7,8},
+            new[] {0,3,6}, new[] {1,4,7}, new[] {2,5,8},
+            new[] {0,4,8}, new[] {2,4,6}
+        };
 
-        int move = available.First(); // simple logic (can improve later)
+        foreach (var pattern in winPatterns)
+        {
+            var values = pattern.Select(i => game.Board[i]).ToArray();
 
-        game.Board[move] = "O";
+            int playerCount = values.Count(v => v == player);
+            int emptyCount = values.Count(string.IsNullOrEmpty);
+
+            if (playerCount == 2 && emptyCount == 1)
+            {
+                return pattern.First(i => string.IsNullOrEmpty(game.Board[i]));
+            }
+        }
+
+        return null;
+    }
+
+    private void ApplyMove(GameState game, int position, string player)
+    {
+        game.Board[position] = player;
 
         game.Moves.Add(new Move
         {
             MoveNumber = game.Moves.Count + 1,
-            Player = "O",
-            Position = move
+            Player = player,
+            Position = position
         });
 
         CheckWinner(game);
 
         if (game.Status == GameStatus.InProgress)
         {
-            game.CurrentPlayer = "X";
+            game.CurrentPlayer = player == "O" ? "X" : "O";
         }
     }
 
-    // Undo
     public GameState? Undo(Guid id)
     {
         if (!_games.ContainsKey(id)) return null;
@@ -177,7 +231,6 @@ public class GameService
         game.CurrentPlayer = lastMove.Player;
     }
 
-    // Reset Game
     public GameState? ResetGame(Guid id)
     {
         if (!_games.ContainsKey(id)) return null;
@@ -189,11 +242,11 @@ public class GameService
         game.CurrentPlayer = "X";
         game.Status = GameStatus.InProgress;
         game.Winner = null;
+        game.WinningCombination = null;
 
         return game;
     }
 
-    // Scoreboard
     public Scoreboard GetScoreboard()
     {
         return _scoreboard;

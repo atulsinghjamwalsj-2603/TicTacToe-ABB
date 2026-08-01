@@ -1,71 +1,128 @@
 import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable, tap, BehaviorSubject  } from 'rxjs';
+
+import { GameMode } from '../models/game-mode';
+import { GameState } from '../models/game-state';
+import { Scoreboard } from '../models/scoreboard';
 
 @Injectable({
   providedIn: 'root'
 })
 export class GameService {
 
-  cells: ('X' | 'O' | null)[] = Array(9).fill(null);
-  currentPlayer: 'X' | 'O' = 'X';
-  xScore = 0;
-  oScore = 0;
-  winner: string | null = null;
-  winningCombo: number[] = [];
+  private readonly apiUrl = 'http://localhost:5273/api';
 
-  makeMove(index: number) {
-  if (this.cells[index] || this.winner) return;
+  gameState$ = new BehaviorSubject<GameState | null>(null);
 
-  this.cells[index] = this.currentPlayer;
+  scoreboard$ = new BehaviorSubject<Scoreboard>({
+    xWins: 0,
+    oWins: 0,
+    draws: 0
+  });
 
-  const winner = this.checkWinner();
+  constructor(private readonly http: HttpClient) {}
 
-  if (winner) {
-    this.winner = winner;
+  createGame(mode: GameMode): Observable<GameState> {
+    return this.http
+      .post<GameState>(`${this.apiUrl}/games`, { mode })
+      .pipe(
+        tap(game => this.gameState$.next(game))
+      );
+  }
 
-    if (winner === 'X') {
-      this.xScore++;
-    } else {
-      this.oScore++;
+  getGame(): Observable<GameState> {
+    if (!this.gameState$.value) {
+      throw new Error('No active game exists.');
     }
 
-    return;
+    return this.http
+      .get<GameState>(`${this.apiUrl}/games/${this.gameState$.value.id}`)
+      .pipe(
+        tap(game => {
+  this.gameState$.next(game);
+})
+      );
   }
 
-  this.currentPlayer = this.currentPlayer === 'X' ? 'O' : 'X';
-}
-
-  resetGame() {
-  this.cells = Array(9).fill(null);
-  this.currentPlayer = 'X';
-  this.winningCombo = [];
-  this.winner = null;
-  }
- 
-  resetScore() {
-  this.xScore = 0;
-  this.oScore = 0;
-}
-
-checkWinner(): string | null {
-  const wins = [
-    [0,1,2],[3,4,5],[6,7,8],
-    [0,3,6],[1,4,7],[2,5,8],
-    [0,4,8],[2,4,6]
-  ];
-
-  for (let combo of wins) {
-    const [a, b, c] = combo;
-
-    if (
-      this.cells[a] &&
-      this.cells[a] === this.cells[b] &&
-      this.cells[a] === this.cells[c]
-    ) {
-      this.winningCombo = combo;
-      return this.cells[a];
+  makeMove(position: number): Observable<GameState> {
+    if (!this.gameState$.value) {
+      throw new Error('No active game exists.');
     }
+
+    return this.http
+      .post<GameState>(
+        `${this.apiUrl}/games/${this.gameState$.value.id}/moves`,
+        {
+          player: this.gameState$.value.currentPlayer,
+          position
+        }
+      )
+      .pipe(
+        tap(game => {
+  this.gameState$.next(game);
+})
+      );
   }
 
-  return null;
-}
+  undo(): Observable<GameState> {
+    if (!this.gameState$.value) {
+      throw new Error('No active game exists.');
+    }
+
+    return this.http
+      .post<GameState>(
+        `${this.apiUrl}/games/${this.gameState$.value.id}/undo`,
+        {}
+      )
+      .pipe(
+        tap(game => {
+  this.gameState$.next(game);
+})
+      );
+  }
+
+  resetGame(): Observable<GameState> {
+    if (!this.gameState$.value) {
+      throw new Error('No active game exists.');
+    }
+
+    return this.http
+      .post<GameState>(
+        `${this.apiUrl}/games/${this.gameState$.value.id}/reset`,
+        {}
+      )
+      .pipe(
+        tap(game => {
+  this.gameState$.next(game);
+})
+      );
+  }
+
+  getScoreboard(): Observable<Scoreboard> {
+    return this.http
+      .get<Scoreboard>(`${this.apiUrl}/scoreboard`)
+      .pipe(
+        tap(scoreboard => {
+          this.scoreboard$.next(scoreboard);
+        })
+      );
+  }
+
+  resetScoreboard(): Observable<void> {
+    return this.http
+      .post<void>(
+        `${this.apiUrl}/scoreboard/reset`,
+        {}
+      )
+      .pipe(
+        tap(() => {
+          this.scoreboard$.next({
+            xWins: 0,
+            oWins: 0,
+            draws: 0
+          });
+        })
+      );
+  }
 }

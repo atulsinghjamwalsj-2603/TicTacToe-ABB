@@ -15,14 +15,14 @@ public class ScoreboardController : ControllerBase
         _gameService = gameService;
     }
 
-    // 🏆 Get scoreboard
+    // Get scoreboard
     [HttpGet]
     public ActionResult<Scoreboard> GetScoreboard()
     {
         return Ok(_gameService.GetScoreboard());
     }
 
-    // 🔄 Reset scoreboard
+    // Reset scoreboard
     [HttpPost("reset")]
     public IActionResult ResetScoreboard()
     {
