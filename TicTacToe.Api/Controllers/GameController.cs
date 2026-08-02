@@ -16,7 +16,7 @@ public class GamesController : ControllerBase
         _gameService = gameService;
     }
 
-    // 🎯 Create new game
+    // Create new game
     [HttpPost]
     public ActionResult<GameState> CreateGame(CreateGameRequest request)
     {
@@ -24,7 +24,7 @@ public class GamesController : ControllerBase
         return Ok(game);
     }
 
-    // 🎯 Get game state
+    // Get game state
     [HttpGet("{id}")]
     public ActionResult<GameState> GetGame(Guid id)
     {
@@ -35,7 +35,7 @@ public class GamesController : ControllerBase
         return Ok(game);
     }
 
-    // 🎯 Make move
+    // Make move
     [HttpPost("{id}/moves")]
     public ActionResult<GameState> MakeMove(Guid id, MakeMoveRequest request)
     {
@@ -46,7 +46,7 @@ public class GamesController : ControllerBase
         return Ok(game);
     }
 
-    // 🔁 Undo
+    // Undo
     [HttpPost("{id}/undo")]
     public ActionResult<GameState> Undo(Guid id)
     {
@@ -57,7 +57,7 @@ public class GamesController : ControllerBase
         return Ok(game);
     }
 
-    // 🔄 Reset game
+    // Reset game
     [HttpPost("{id}/reset")]
     public ActionResult<GameState> Reset(Guid id)
     {
