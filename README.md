@@ -202,7 +202,7 @@ The API starts on the configured local URL.
 
 # Running the Frontend
 
-Navigate to the Angular application.
+Navigate to the Angular application. in game.ts make sure the API url is correct(private readonly apiUrl = 'http://localhost:5273/api';)
 
 ```bash
 npm install
